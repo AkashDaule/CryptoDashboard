@@ -109,8 +109,10 @@ def get_data(symbol: str):
 
 try:
     data = get_data(symbol)
+    st.write(data)
     df = pd.DataFrame(data)
 except Exception as e:
+    st.error(f"Error loading data: {e}")
     error_msg = str(e)
     if "Invalid symbol" in error_msg or "symbol does not exist" in error_msg.lower():
         st.error(f"❌ Invalid trading pair '{symbol.upper()}'. Please check if this trading pair exists on Binance.")
