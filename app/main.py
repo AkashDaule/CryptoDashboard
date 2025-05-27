@@ -37,22 +37,31 @@ if st.session_state["theme"] != new_theme:
 # Inject dark/light mode via CSS + JS
 st.markdown(f"""
     <style>
+    /* Light mode styles */
     body {{
         background-color: white;
         color: black;
     }}
+    
+    /* Dark mode styles */
     body[data-theme="dark"] {{
         background-color: #0e1117;
         color: white;
     }}
+    
+    /* Style for Streamlit elements */
     .stApp {{
         background-color: {st.session_state["theme"] == "dark" and "#0e1117" or "white"};
         color: {st.session_state["theme"] == "dark" and "white" or "black"};
     }}
+    
+    /* Style for sidebar */
     .css-1d391kg, .css-1d391kg > div {{
         background-color: {st.session_state["theme"] == "dark" and "#1e2130" or "white"} !important;
-        color: {st.session_state["theme"] == "dark" and "white" or "black"} !important;
+        color: {st.session_state["theme"] == "dark" and "white" or "black"};
     }}
+
+    /* Style for sidebar elements */
     .css-1d391kg .stSlider, 
     .css-1d391kg .stTextInput,
     .css-1d391kg .stNumberInput,
@@ -60,6 +69,8 @@ st.markdown(f"""
         background-color: {st.session_state["theme"] == "dark" and "#1e2130" or "white"} !important;
         color: {st.session_state["theme"] == "dark" and "white" or "black"} !important;
     }}
+    
+    /* Style for metric cards */
     .stMetric {{
         background-color: {st.session_state["theme"] == "dark" and "#1e2130" or "white"};
         border: 1px solid {st.session_state["theme"] == "dark" and "#2d3748" or "#e0e0e0"};
@@ -67,12 +78,18 @@ st.markdown(f"""
         padding: 10px;
         color: {st.session_state["theme"] == "dark" and "white" or "black"};
     }}
+
+    /* Style for metric values and labels */
     .stMetric label, .stMetric div {{
         color: {st.session_state["theme"] == "dark" and "white" or "black"} !important;
     }}
+
+    /* Style for titles and text */
     h1, h2, h3, p, .stMarkdown {{
         color: {st.session_state["theme"] == "dark" and "white" or "black"};
     }}
+
+    /* Style for chart text */
     .stChart {{
         color: {st.session_state["theme"] == "dark" and "white" or "black"};
     }}
@@ -85,13 +102,14 @@ st.markdown(f"""
 # --- Auto-refresh ---
 st_autorefresh(interval=refresh_interval * 1000, key="datarefresh")
 
-# --- Fetch Data ---
+# --- Fetch Data with cache   fetach data with catche ---
 @st.cache_data(ttl=refresh_interval)
 def get_data(symbol: str):
     return fetch_trade_data(symbol)
 
 try:
-    df = get_data(symbol)
+    data = get_data(symbol)
+    df = pd.DataFrame(data)
 except Exception as e:
     error_msg = str(e)
     if "Invalid symbol" in error_msg or "symbol does not exist" in error_msg.lower():
@@ -105,14 +123,17 @@ except Exception as e:
 st.title(f"📊 {symbol.upper()} Live Dashboard (Polling)")
 
 if not df.empty:
-    last_price = df["price"].iloc[0]
-    pct_change = df["priceChangePercent"].iloc[0]
-    volume = df["volume"].iloc[0]
-    now = df["timestamp"].iloc[0]
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df = df.set_index("timestamp").sort_index()
+    df["rolling_mean"] = df["price"].rolling("60s").mean()
+    df["pct_change"] = df["price"].pct_change() * 100
+
+    last_price = df['price'].iloc[-1]
 
     # --- Alert Check ---
     if alert_threshold > 0 and last_price > alert_threshold:
         st.error(f"🚨 ALERT: Price crossed ${alert_threshold:,.2f}!")
+
         if sound_alert:
             st.markdown("""
             <audio autoplay>
@@ -123,13 +144,13 @@ if not df.empty:
     # --- Metric cards ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Last Price", f"${last_price:,.2f}")
-    col2.metric("24h Δ%", f"{pct_change:.2f}%")
-    col3.metric("24h Volume", f"{volume:,.2f}")
+    col2.metric("1-min Δ%", f"{df['pct_change'].iloc[-1]:.2f}%")
+    col3.metric("1-min Volume", f"{df['volume'].tail(60).sum():,.2f}")
 
-    # --- Chart with only one point
-    chart_df = pd.DataFrame({
-        "Price": [last_price]
-    }, index=[now])
+    # --- Chart (highlight if above threshold) ---
+    chart_df = df[["price", "rolling_mean"]].copy()
+    if alert_threshold > 0:
+        chart_df["threshold"] = alert_threshold  # constant line for comparison
 
     st.line_chart(chart_df)
 else:
