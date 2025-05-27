@@ -102,17 +102,15 @@ st.markdown(f"""
 # --- Auto-refresh ---
 st_autorefresh(interval=refresh_interval * 1000, key="datarefresh")
 
-# --- Fetch Data with cache ---
+# --- Fetch Data with cache   fetach data with catche ---
 @st.cache_data(ttl=refresh_interval)
 def get_data(symbol: str):
     return fetch_trade_data(symbol)
 
 try:
     data = get_data(symbol)
-    st.write(data)
     df = pd.DataFrame(data)
 except Exception as e:
-    st.error(f"Error loading data: {e}")
     error_msg = str(e)
     if "Invalid symbol" in error_msg or "symbol does not exist" in error_msg.lower():
         st.error(f"❌ Invalid trading pair '{symbol.upper()}'. Please check if this trading pair exists on Binance.")
